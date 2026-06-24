@@ -1,0 +1,1087 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ordenação Interativos — The Sort Engine</title>
+<style>
+:root{
+  --bg:#0d1117;--surface:#161b22;--panel:#1c2330;--border:#30363d;
+  --accent:#58a6ff;--green:#3fb950;--warn:#f78166;--yellow:#e3b341;
+  --purple:#8957e5;--text:#e6edf3;--muted:#8b949e;
+  --mono:'JetBrains Mono','Fira Mono','Courier New',monospace;
+  --r:8px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  background:var(--bg);color:var(--text);min-height:100vh;line-height:1.6}
+
+/* ── NAV ── */
+nav{
+  position:sticky;top:0;z-index:100;
+  background:rgba(13,17,23,.95);backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:.5rem;padding:.75rem 2rem;flex-wrap:wrap;
+}
+.nav-logo{display:flex;align-items:center;gap:.6rem;font-weight:700;font-size:1.05rem;margin-right:1rem}
+.nav-logo .dot{width:10px;height:10px;border-radius:50%;background:var(--accent)}
+nav a{color:var(--muted);text-decoration:none;font-size:.85rem;padding:.35rem .7rem;
+  border-radius:6px;transition:all .15s}
+nav a:hover,nav a.on{color:var(--text);background:var(--panel)}
+.nav-right{margin-left:auto;display:flex;align-items:center;gap:.5rem}
+.save-indicator{
+  display:none;align-items:center;gap:.4rem;
+  background:rgba(63,185,80,.15);border:1px solid var(--green);
+  border-radius:20px;padding:.2rem .75rem;font-size:.75rem;color:var(--green);
+}
+.save-indicator.show{display:flex}
+
+/* ── HERO ── */
+.hero{
+  text-align:center;padding:3.5rem 2rem 2rem;
+  background:radial-gradient(ellipse 80% 40% at 50% 0%,rgba(88,166,255,.08),transparent);
+}
+.hero-badge{
+  display:inline-flex;align-items:center;gap:.5rem;
+  background:rgba(88,166,255,.1);border:1px solid rgba(88,166,255,.3);
+  border-radius:20px;padding:.3rem 1rem;font-size:.8rem;margin-bottom:1rem;
+}
+.hero h1{font-size:clamp(2rem,5vw,3rem);font-weight:800;margin-bottom:.5rem;
+  background:linear-gradient(135deg,var(--text),var(--accent));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.hero p{color:var(--muted);max-width:600px;margin:0 auto 1.5rem;font-size:.95rem}
+
+/* ── LAYOUT ── */
+.container{max-width:1280px;margin:0 auto;padding:1.5rem 2rem}
+.section{padding:2rem 2rem;max-width:1280px;margin:0 auto}
+.section-title{
+  font-size:1.1rem;font-weight:700;margin-bottom:1.25rem;
+  display:flex;align-items:center;gap:.6rem;
+}
+.section-title::after{content:'';flex:1;height:1px;background:var(--border)}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem}
+@media(max-width:900px){.grid-2,.grid-3{grid-template-columns:1fr}}
+
+/* ── CARDS ── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.card-hd{
+  display:flex;align-items:center;gap:.6rem;
+  padding:.85rem 1.2rem;border-bottom:1px solid var(--border);
+  background:var(--panel);font-size:.9rem;font-weight:600;
+}
+.card-bd{padding:1.2rem}
+
+/* ── CONTROLS ── */
+.ctrl-row{display:flex;flex-wrap:wrap;gap:.75rem;align-items:center;margin-bottom:1rem}
+.inp{
+  padding:.45rem .85rem;background:var(--panel);border:1px solid var(--border);
+  border-radius:6px;color:var(--text);font-size:.85rem;
+}
+.inp:focus{outline:none;border-color:var(--accent)}
+select.inp{cursor:pointer}
+
+/* ── BUTTONS ── */
+.btn{
+  display:inline-flex;align-items:center;gap:.4rem;
+  padding:.48rem 1rem;border-radius:6px;border:none;
+  cursor:pointer;font-size:.875rem;font-weight:500;transition:all .15s;
+}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-blue{background:var(--accent);color:#000}
+.btn-blue:hover:not(:disabled){background:#79b8ff}
+.btn-green{background:var(--green);color:#000}
+.btn-green:hover:not(:disabled){background:#56d364}
+.btn-purple{background:var(--purple);color:#fff}
+.btn-purple:hover:not(:disabled){background:#a371f7}
+.btn-ghost{background:transparent;color:var(--text);border:1px solid var(--border)}
+.btn-ghost:hover:not(:disabled){background:var(--border)}
+.btn-warn{background:var(--warn);color:#fff}
+.btn-sm{padding:.3rem .7rem;font-size:.8rem}
+
+/* ── VISUALIZAÇÃO SORT ── */
+.viz-wrap{
+  display:flex;align-items:flex-end;justify-content:center;
+  gap:3px;padding:1rem 0;min-height:180px;
+  background:var(--panel);border-radius:6px;border:1px solid var(--border);
+  margin-bottom:.75rem;overflow:hidden;
+}
+.bar{
+  flex:1;min-width:6px;max-width:40px;border-radius:3px 3px 0 0;
+  transition:height .12s ease,background .12s;
+  background:var(--accent);
+}
+.bar.comparing{background:var(--yellow)}
+.bar.swapping {background:var(--warn)}
+.bar.sorted   {background:var(--green)}
+.bar.pivot    {background:var(--purple)}
+
+/* ── STATS ── */
+.stats-row{display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:.75rem}
+.stat-pill{
+  background:var(--panel);border:1px solid var(--border);
+  border-radius:20px;padding:.2rem .8rem;font-size:.8rem;
+}
+.stat-pill b{color:var(--accent)}
+.stat-pill.g b{color:var(--green)}
+.stat-pill.y b{color:var(--yellow)}
+
+/* ── SPEED / PROGRESS ── */
+.speed-row{display:flex;align-items:center;gap:.75rem;font-size:.8rem;color:var(--muted)}
+.speed-row input[type=range]{flex:1;accent-color:var(--accent)}
+.progress-bar{height:4px;background:var(--border);border-radius:2px;margin-bottom:.5rem;overflow:hidden}
+.progress-fill{height:100%;background:var(--accent);border-radius:2px;transition:width .1s}
+.log-box{
+  background:var(--panel);border:1px solid var(--border);border-radius:6px;
+  padding:.6rem .9rem;font-size:.78rem;color:var(--muted);
+  min-height:32px;font-family:var(--mono);
+}
+
+/* ── TABELA DATASET ── */
+.tbl-wrap{max-height:280px;overflow-y:auto}
+table{width:100%;border-collapse:collapse;font-size:.84rem}
+th{
+  text-align:left;padding:.4rem .7rem;color:var(--muted);font-weight:500;
+  border-bottom:1px solid var(--border);background:var(--panel);
+  position:sticky;top:0;z-index:1;
+}
+td{padding:.4rem .7rem;border-bottom:1px solid var(--border)}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,.03)}
+tr.cmp-hl td{background:rgba(88,166,255,.12)}
+tr.cmp-hl td:first-child{border-left:3px solid var(--accent)}
+tr.sorted-row td{background:rgba(63,185,80,.07)}
+
+/* ── BUSCA ── */
+.search-result{
+  background:var(--panel);border:1px solid var(--border);border-radius:6px;
+  padding:.7rem;font-size:.85rem;margin-top:.5rem;min-height:40px;
+}
+.found-item{
+  display:flex;align-items:center;gap:.5rem;
+  padding:.3rem .5rem;border-radius:4px;
+  background:rgba(63,185,80,.12);border:1px solid rgba(63,185,80,.3);
+  margin-bottom:.3rem;font-size:.83rem;
+}
+
+/* ── GRÁFICO COMPARATIVO ── */
+.chart-wrap{
+  background:var(--panel);border:1px solid var(--border);
+  border-radius:6px;padding:1rem;min-height:200px;
+}
+.chart-bars{display:flex;align-items:flex-end;gap:.5rem;height:160px;padding:0 .5rem}
+.chart-bar-wrap{display:flex;flex-direction:column;align-items:center;flex:1;height:100%}
+.chart-bar-inner{
+  width:100%;border-radius:4px 4px 0 0;min-height:2px;
+  transition:height .4s ease;display:flex;align-items:flex-end;justify-content:center;
+  padding-bottom:2px;font-size:.65rem;color:#000;font-weight:700;
+}
+.chart-label{font-size:.7rem;color:var(--muted);margin-top:.3rem;text-align:center}
+.chart-legend{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.5rem}
+.legend-item{display:flex;align-items:center;gap:.3rem;font-size:.75rem;color:var(--muted)}
+.legend-dot{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+
+/* ── PERSISTÊNCIA PANEL ── */
+.persist-panel{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r);overflow:hidden;margin-top:1.5rem;
+}
+.persist-hd{
+  background:linear-gradient(90deg,rgba(63,185,80,.15),rgba(88,166,255,.1));
+  border-bottom:1px solid var(--border);
+  padding:.85rem 1.2rem;display:flex;align-items:center;gap:.75rem;
+}
+.persist-hd h2{font-size:.95rem;font-weight:700}
+.fmt-pill{
+  display:inline-flex;align-items:center;gap:.3rem;
+  padding:.15rem .6rem;border-radius:20px;font-size:.73rem;font-weight:700;
+  border:1px solid;
+}
+.fp-csv{color:var(--accent);border-color:var(--accent);background:rgba(88,166,255,.1)}
+.fp-pkl{color:var(--yellow);border-color:var(--yellow);background:rgba(227,179,65,.1)}
+
+.persist-body{display:grid;grid-template-columns:1fr 1fr;gap:0}
+@media(max-width:800px){.persist-body{grid-template-columns:1fr}}
+.persist-col{padding:1.2rem;border-right:1px solid var(--border)}
+.persist-col:last-child{border-right:none}
+.persist-col h3{font-size:.85rem;font-weight:600;margin-bottom:.8rem;color:var(--muted)}
+
+.fmt-compare{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:.75rem}
+.fcard{
+  background:var(--panel);border:1px solid var(--border);
+  border-radius:6px;padding:.9rem;text-align:center;
+}
+.fcard .fn{font-size:1rem;font-weight:700;margin-bottom:.1rem}
+.fcard .fe{font-size:.72rem;color:var(--muted);margin-bottom:.6rem}
+.fcard .fs{font-size:.8rem;margin:.1rem 0}
+.fcard .fs b{color:var(--yellow)}
+.fb{
+  display:inline-block;margin-top:.4rem;
+  padding:.15rem .6rem;border-radius:4px;font-size:.72rem;font-weight:700;
+}
+.fb-txt{background:rgba(88,166,255,.2);color:var(--accent)}
+.fb-bin{background:rgba(227,179,65,.2);color:var(--yellow)}
+.fcard.na{opacity:.4}
+
+.tabs{display:flex;border-bottom:1px solid var(--border)}
+.tab{
+  padding:.5rem 1rem;font-size:.83rem;border:none;
+  background:transparent;color:var(--muted);cursor:pointer;
+  border-bottom:2px solid transparent;transition:all .15s;
+}
+.tab.on{color:var(--accent);border-bottom-color:var(--accent)}
+.tab:hover:not(.on){color:var(--text)}
+.tpanel{display:none;padding:1rem}
+.tpanel.on{display:block}
+
+pre.code{
+  background:#0d1117;border:1px solid var(--border);border-radius:6px;
+  padding:.85rem;font-family:var(--mono);font-size:.74rem;
+  overflow:auto;max-height:220px;color:#c9d1d9;line-height:1.55;white-space:pre;
+}
+.lbl{font-size:.7rem;color:var(--muted);margin:.5rem 0 .2rem;
+  text-transform:uppercase;letter-spacing:.05em}
+
+/* ── ALERTS ── */
+.alert{border-radius:6px;padding:.65rem 1rem;font-size:.84rem;border-left:3px solid;margin-top:.5rem}
+.a-info{background:rgba(88,166,255,.1);border-color:var(--accent)}
+.a-ok  {background:rgba(63,185,80,.1); border-color:var(--green)}
+.a-warn{background:rgba(247,129,102,.1);border-color:var(--warn)}
+
+/* ── STATUS BAR ── */
+#sbar{
+  position:fixed;bottom:0;left:0;right:0;z-index:99;
+  background:var(--panel);border-top:1px solid var(--border);
+  padding:.4rem 2rem;font-size:.78rem;color:var(--muted);
+  display:flex;align-items:center;gap:.6rem;
+}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--muted);flex-shrink:0}
+#sbar.ok   .dot{background:var(--green)}
+#sbar.err  .dot{background:var(--warn)}
+#sbar.busy .dot{background:var(--yellow);animation:blink 1s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+footer{height:2rem}
+
+/* ── MISC ── */
+.bar-vis{margin:.25rem 0}
+.bar-vis-inner{display:flex;align-items:center;gap:.5rem;font-size:.78rem}
+.bar-vis-track{flex:1;background:var(--border);border-radius:3px;height:12px;overflow:hidden}
+.bar-vis-fill{height:100%;border-radius:3px;transition:width .4s}
+</style>
+</head>
+<body>
+
+<!-- ── NAV ── -->
+<nav>
+  <div class="nav-logo"><div class="dot"></div>The Sort Engine</div>
+  <a href="#sort" class="on" onclick="scrollTo('sort')">Visualizar</a>
+  <a href="#comparar" onclick="scrollTo('comparar')">Comparar</a>
+  <a href="#busca" onclick="scrollTo('busca')">Buscar</a>
+  <a href="#persistencia" onclick="scrollTo('persistencia')">Persistência</a>
+  <div class="nav-right">
+    <div class="save-indicator" id="save-ind">✓ Dados salvos</div>
+  </div>
+</nav>
+
+<!-- ── HERO ── -->
+<div class="hero">
+  <div class="hero-badge">Dados do Banco Mundial · Backend Python · CSV + Pickle</div>
+  <h1>The <em>Sort</em> Engine</h1>
+  <p>Escolha uma API, selecione um campo e assista cada comparação e troca ganharem vida.
+     Compare O(n²) vs O(n log n) com dados reais — agora com persistência em disco.</p>
+</div>
+
+<!-- ══════════════════════════════════════
+     SEÇÃO 1 — VISUALIZADOR
+════════════════════════════════════════ -->
+<section class="section" id="sort">
+  <div class="section-title">🎬 Visualizador de Ordenação</div>
+  <div class="grid-2">
+
+    <!-- Controles + viz -->
+    <div>
+      <div class="card">
+        <div class="card-hd"><span>⚙️</span> Configuração</div>
+        <div class="card-bd">
+          <div class="ctrl-row">
+            <select class="inp" id="v-source">
+              <option value="world_bank_gdp">PIB (US$ bilhões)</option>
+              <option value="world_bank_life">Expectativa de Vida</option>
+              <option value="world_bank_population">População (milhões)</option>
+              <option value="world_bank_gdp_pc">PIB per Capita</option>
+            </select>
+            <select class="inp" id="v-algo">
+              <option value="bubble">Bubble Sort</option>
+              <option value="selection">Selection Sort</option>
+              <option value="insertion">Insertion Sort</option>
+              <option value="merge">Merge Sort</option>
+              <option value="quick">Quick Sort</option>
+              <option value="heap">Heap Sort</option>
+            </select>
+            <select class="inp" id="v-size">
+              <option value="10">10 países</option>
+              <option value="16" selected>16 países</option>
+              <option value="25">25 países</option>
+              <option value="50">50 países</option>
+            </select>
+          </div>
+          <div class="ctrl-row">
+            <button class="btn btn-blue" id="v-play" onclick="iniciarSort()">▶ Play</button>
+            <button class="btn btn-ghost" id="v-pause" onclick="pauseSort()" disabled>⏸ Pause</button>
+            <button class="btn btn-ghost" id="v-step"  onclick="stepSort()"  disabled>⇥ Step</button>
+            <button class="btn btn-ghost" id="v-reset" onclick="resetSort()">↺ Reset</button>
+            <button class="btn btn-ghost btn-sm" id="v-offline" onclick="iniciarSortOffline()">💾 Offline</button>
+          </div>
+          <div class="speed-row">
+            <span>Vel.</span>
+            <input type="range" id="v-speed" min="10" max="500" value="120">
+            <span id="v-speed-val">120ms</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:1rem">
+        <div class="viz-wrap" id="viz-bars"></div>
+        <div class="progress-bar"><div class="progress-fill" id="v-prog" style="width:0%"></div></div>
+        <div class="stats-row" id="v-stats">
+          <span class="stat-pill">Comparações: <b id="s-comps">0</b></span>
+          <span class="stat-pill y">Trocas: <b id="s-swaps">0</b></span>
+          <span class="stat-pill g">Tempo: <b id="s-time">0.00s</b></span>
+          <span class="stat-pill">Passo: <b id="s-step">0/0</b></span>
+        </div>
+        <div class="log-box" id="v-log">Pronto. Configure e pressione Play ▶</div>
+      </div>
+    </div>
+
+    <!-- Tabela de dados -->
+    <div>
+      <div class="card">
+        <div class="card-hd">
+          <span>📋</span> Dataset
+          <span id="ds-tag" style="margin-left:auto;font-size:.75rem;color:var(--muted)"></span>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>#</th><th>País</th><th>Valor</th><th>Status</th></tr></thead>
+            <tbody id="ds-body">
+              <tr><td colspan="4" style="text-align:center;padding:2rem;color:var(--muted)">
+                Pressione Play para carregar dados</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Legenda -->
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.75rem;font-size:.78rem">
+        <span style="display:flex;align-items:center;gap:.3rem">
+          <span style="width:12px;height:12px;border-radius:2px;background:var(--accent);display:inline-block"></span>Normal
+        </span>
+        <span style="display:flex;align-items:center;gap:.3rem">
+          <span style="width:12px;height:12px;border-radius:2px;background:var(--yellow);display:inline-block"></span>Comparando
+        </span>
+        <span style="display:flex;align-items:center;gap:.3rem">
+          <span style="width:12px;height:12px;border-radius:2px;background:var(--warn);display:inline-block"></span>Trocando
+        </span>
+        <span style="display:flex;align-items:center;gap:.3rem">
+          <span style="width:12px;height:12px;border-radius:2px;background:var(--green);display:inline-block"></span>Ordenado
+        </span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════
+     SEÇÃO 2 — COMPARAR ALGORITMOS
+════════════════════════════════════════ -->
+<section class="section" id="comparar" style="border-top:1px solid var(--border)">
+  <div class="section-title">📊 Comparar Algoritmos</div>
+  <div class="grid-2">
+    <div>
+      <div class="card">
+        <div class="card-hd"><span>⚙️</span> Configuração</div>
+        <div class="card-bd">
+          <div class="ctrl-row">
+            <select class="inp" id="c-source">
+              <option value="world_bank_gdp">PIB</option>
+              <option value="world_bank_life">Expectativa de Vida</option>
+              <option value="world_bank_population">População</option>
+              <option value="world_bank_gdp_pc">PIB per Capita</option>
+            </select>
+            <select class="inp" id="c-size">
+              <option value="10">10</option>
+              <option value="16" selected>16</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+            </select>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.75rem" id="c-algos">
+            <label style="font-size:.82rem;display:flex;align-items:center;gap:.3rem">
+              <input type="checkbox" value="bubble"    checked> Bubble</label>
+            <label style="font-size:.82rem;display:flex;align-items:center;gap:.3rem">
+              <input type="checkbox" value="selection" checked> Selection</label>
+            <label style="font-size:.82rem;display:flex;align-items:center;gap:.3rem">
+              <input type="checkbox" value="insertion" checked> Insertion</label>
+            <label style="font-size:.82rem;display:flex;align-items:center;gap:.3rem">
+              <input type="checkbox" value="merge"     checked> Merge</label>
+            <label style="font-size:.82rem;display:flex;align-items:center;gap:.3rem">
+              <input type="checkbox" value="quick"     checked> Quick</label>
+            <label style="font-size:.82rem;display:flex;align-items:center;gap:.3rem">
+              <input type="checkbox" value="heap"      checked> Heap</label>
+          </div>
+          <div class="ctrl-row">
+            <button class="btn btn-blue" onclick="compararAlgos()">▶ Comparar Agora</button>
+            <button class="btn btn-ghost btn-sm" onclick="compararAlgosOffline()">💾 Usar Disco</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Métrica selecionada -->
+      <div style="margin-top:.75rem;display:flex;gap:.5rem;flex-wrap:wrap" id="c-metric-row">
+        <button class="btn btn-ghost btn-sm on-metric" onclick="setMetric('comparisons',this)">Comparações</button>
+        <button class="btn btn-ghost btn-sm" onclick="setMetric('swaps',this)">Trocas</button>
+        <button class="btn btn-ghost btn-sm" onclick="setMetric('time_ms',this)">Tempo (ms)</button>
+      </div>
+
+      <!-- Gráfico de barras -->
+      <div class="chart-wrap" style="margin-top:.75rem">
+        <div class="chart-bars" id="c-chart">
+          <div style="color:var(--muted);font-size:.85rem;margin:auto">Clique em "Comparar Agora"</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabela de resultados -->
+    <div>
+      <div class="card">
+        <div class="card-hd"><span>📋</span> Resultados</div>
+        <div class="tbl-wrap">
+          <table id="c-table">
+            <thead>
+              <tr>
+                <th>Algoritmo</th><th>Comparações</th>
+                <th>Trocas</th><th>Tempo ms</th>
+                <th>Melhor</th><th>Médio</th><th>Pior</th>
+              </tr>
+            </thead>
+            <tbody id="c-body">
+              <tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--muted)">
+                Clique em "Comparar Agora"</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════
+     SEÇÃO 3 — BUSCA
+════════════════════════════════════════ -->
+<section class="section" id="busca" style="border-top:1px solid var(--border)">
+  <div class="section-title">🔍 Busca Interativa</div>
+  <div class="grid-2">
+    <div>
+      <div class="card">
+        <div class="card-hd"><span>⚙️</span> Configurar Busca</div>
+        <div class="card-bd">
+          <div class="ctrl-row">
+            <select class="inp" id="b-source">
+              <option value="world_bank_gdp">PIB</option>
+              <option value="world_bank_life">Expectativa de Vida</option>
+              <option value="world_bank_population">População</option>
+              <option value="world_bank_gdp_pc">PIB per Capita</option>
+            </select>
+            <select class="inp" id="b-tipo">
+              <option value="substring">Por Nome (substring)</option>
+              <option value="exact">Nome Exato</option>
+            </select>
+          </div>
+          <div class="ctrl-row">
+            <input class="inp" id="b-q" type="text" placeholder="País ou valor…" style="flex:1">
+            <button class="btn btn-blue" onclick="executarBusca()">🔍 Buscar</button>
+            <button class="btn btn-ghost btn-sm" onclick="executarBuscaOffline()">💾 Disco</button>
+          </div>
+          <div class="ctrl-row">
+            <button class="btn btn-ghost btn-sm" onclick="compararBuscas()">⚡ Comparar Linear vs Binária</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="busca-result" style="margin-top:.75rem"></div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="card-hd"><span>📋</span> Resultado Detalhado</div>
+        <div class="card-bd" id="busca-detail">
+          <div class="a-info alert">Configure e execute uma busca acima.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════
+     SEÇÃO 4 — PERSISTÊNCIA
+════════════════════════════════════════ -->
+<section class="section" id="persistencia" style="border-top:1px solid var(--border)">
+  <div class="section-title">💾 Persistência em Disco</div>
+
+  <!-- Controles de salvar/carregar -->
+  <div class="ctrl-row" style="margin-bottom:1.25rem">
+    <button class="btn btn-blue" onclick="carregarAPI()">🌐 Carregar da API</button>
+    <button class="btn btn-green" id="btn-save" onclick="salvarDados()" disabled>💿 Salvar (CSV + Pickle)</button>
+    <button class="btn btn-ghost btn-sm" id="btn-offline" onclick="carregarOffline()" disabled>
+      💾 Carregar do Disco
+    </button>
+    <select class="inp" id="offline-fmt" style="max-width:120px">
+      <option value="csv">CSV</option>
+      <option value="pkl">Pickle</option>
+    </select>
+    <button class="btn btn-ghost btn-sm" id="btn-painel" onclick="atualizarPainel()" disabled>
+      📊 Painel
+    </button>
+    <button class="btn btn-ghost btn-sm" id="btn-inspect" onclick="inspecionar()" disabled>
+      🔬 Inspecionar
+    </button>
+  </div>
+
+  <div class="persist-panel">
+    <div class="persist-hd">
+      <h2>Formatos</h2>
+      <span class="fmt-pill fp-csv">CSV · Texto</span>
+      <span class="fmt-pill fp-pkl">Pickle · Binário</span>
+      <span id="p-status" style="margin-left:auto;font-size:.78rem;color:var(--muted)">
+        Nenhum dado salvo ainda
+      </span>
+    </div>
+
+    <div class="persist-body">
+
+      <!-- Painel comparativo -->
+      <div class="persist-col">
+        <h3>📊 Painel Comparativo</h3>
+        <div class="fmt-compare" id="p-compare">
+          <div class="fcard na"><div class="fn">CSV</div><div class="fe">.csv</div>
+            <div style="font-size:.78rem;color:var(--muted)">Salve primeiro</div></div>
+          <div class="fcard na"><div class="fn">Pickle</div><div class="fe">.pkl</div>
+            <div style="font-size:.78rem;color:var(--muted)">Salve primeiro</div></div>
+        </div>
+        <div id="p-bars"></div>
+        <div id="p-save-metrics" style="display:none">
+          <div class="lbl">Tempo de escrita</div>
+          <div class="stat-pill" id="p-csv-write" style="margin:.3rem 0;display:inline-block"></div><br>
+          <div class="stat-pill y" id="p-pkl-write" style="margin:.3rem 0;display:inline-block"></div>
+        </div>
+      </div>
+
+      <!-- Inspeção -->
+      <div class="persist-col" style="border-right:none">
+        <h3>🔬 Inspeção: Texto vs Binário</h3>
+        <div class="tabs">
+          <button class="tab on" onclick="swTab(this,'tp-csv')">CSV (texto)</button>
+          <button class="tab"    onclick="swTab(this,'tp-pkl')">Pickle (binário)</button>
+        </div>
+        <div id="tp-csv" class="tpanel on">
+          <div class="alert a-info">Salve e clique em <b>Inspecionar</b>.</div>
+        </div>
+        <div id="tp-pkl" class="tpanel"></div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<footer></footer>
+
+<!-- Status bar -->
+<div id="sbar" class="ok">
+  <div class="dot"></div>
+  <span id="smsg">Pronto.</span>
+</div>
+
+<script>
+// ══════════════════════════════════════════════
+//  ESTADO GLOBAL
+// ══════════════════════════════════════════════
+const BASE = "";  // no Vercel, /api/* vai direto para o backend
+let dataset      = [];   // dataset atual (da API ou do disco)
+let sortSteps    = [];
+let stepIdx      = 0;
+let playTimer    = null;
+let sortRunning  = false;
+let sortResult   = null;
+let cmpMetric    = "comparisons";
+let cmpData      = null;
+
+const COMPLEXIDADES = {
+  bubble:    { best:"O(n)",     avg:"O(n²)",    worst:"O(n²)"    },
+  selection: { best:"O(n²)",    avg:"O(n²)",    worst:"O(n²)"    },
+  insertion: { best:"O(n)",     avg:"O(n²)",    worst:"O(n²)"    },
+  merge:     { best:"O(n log n)",avg:"O(n log n)",worst:"O(n log n)"},
+  quick:     { best:"O(n log n)",avg:"O(n log n)",worst:"O(n²)"  },
+  heap:      { best:"O(n log n)",avg:"O(n log n)",worst:"O(n log n)"},
+};
+const COLORS = {
+  bubble:"#f78166",selection:"#e3b341",insertion:"#79b8ff",
+  merge:"#3fb950",quick:"#a371f7",heap:"#58a6ff",
+};
+
+// ══════════════════════════════════════════════
+//  STATUS / HTTP
+// ══════════════════════════════════════════════
+const setStatus = (m,t="ok")=>{
+  document.getElementById("sbar").className=t;
+  document.getElementById("smsg").textContent=m;
+};
+const busy=m=>setStatus(m,"busy");
+const ok  =m=>setStatus(m,"ok");
+const err =m=>setStatus(m,"err");
+
+const GET  = async p=>{const r=await fetch(BASE+p);if(!r.ok)throw new Error(await r.text());return r.json()};
+const POST = async(p,b)=>{
+  const r=await fetch(BASE+p,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)});
+  if(!r.ok)throw new Error(await r.text());return r.json();
+};
+
+// ══════════════════════════════════════════════
+//  VISUALIZADOR DE ORDENAÇÃO
+// ══════════════════════════════════════════════
+document.getElementById("v-speed").addEventListener("input",e=>{
+  document.getElementById("v-speed-val").textContent=e.target.value+"ms";
+});
+
+function buildBars(arr, comparing=[], sorted=[], pivot=-1){
+  const wrap=document.getElementById("viz-bars");
+  if(!arr.length){wrap.innerHTML="<span style='color:var(--muted);margin:auto'>Sem dados</span>";return}
+  const max=Math.max(...arr.map(x=>x.value||0));
+  wrap.innerHTML=arr.map((item,i)=>{
+    const h=Math.max(8,Math.round((item.value/max)*160));
+    let cls="bar";
+    if(i===pivot)cls+=" pivot";
+    else if(sorted.includes(i))cls+=" sorted";
+    else if(comparing.includes(i))cls+=" comparing";
+    return `<div class="bar ${cls}" style="height:${h}px" title="${item.name}: ${item.value}"></div>`;
+  }).join("");
+}
+
+function updateTable(arr, comparing=[], sorted=[]){
+  const tb=document.getElementById("ds-body");
+  tb.innerHTML=arr.map((r,i)=>{
+    let cls="", status="—";
+    if(sorted.includes(i)){cls="sorted-row";status="✓"}
+    else if(comparing.includes(i)){cls="cmp-hl";status="↔"}
+    return `<tr class="${cls}">
+      <td>${i+1}</td><td>${r.name}</td>
+      <td>${parseFloat(r.value).toFixed(2)}</td><td>${status}</td>
+    </tr>`;
+  }).join("");
+}
+
+function updateStats(step, total, comps, swaps, t){
+  document.getElementById("s-comps").textContent=comps;
+  document.getElementById("s-swaps").textContent=swaps;
+  document.getElementById("s-time").textContent=(t/1000).toFixed(2)+"s";
+  document.getElementById("s-step").textContent=step+"/"+total;
+  document.getElementById("v-prog").style.width=total?Math.round((step/total)*100)+"%":"0%";
+}
+
+async function iniciarSort(offlineFmt){
+  if(sortRunning){pauseSort();return}
+  const source=document.getElementById("v-source").value;
+  const algo  =document.getElementById("v-algo").value;
+  const size  =document.getElementById("v-size").value;
+
+  busy("Carregando e ordenando…");
+  document.getElementById("v-play").disabled=true;
+
+  try{
+    let url;
+    if(offlineFmt){
+      url=`/api/sort?algorithm=${algo}&size=${size}&offline=true&fmt=${offlineFmt}`;
+    } else {
+      url=`/api/sort?source=${source}&algorithm=${algo}&size=${size}`;
+    }
+    const res=await GET(url);
+    if(!res.ok)throw new Error(res.erro);
+
+    dataset   =res.sorted;
+    sortSteps =res.steps;
+    sortResult=res;
+    stepIdx   =0;
+    sortRunning=true;
+
+    document.getElementById("ds-tag").textContent=
+      `${res.size} países · ${res.fonte==="disco"?"💾 Disco":"🌐 API"}`;
+    document.getElementById("v-pause").disabled=false;
+    document.getElementById("v-step").disabled=false;
+
+    // Mostra estado inicial (não ordenado)
+    const orig=sortSteps[0]||{values:res.sorted.map(x=>x.value),array:res.sorted.map(x=>x.name)};
+    const initArr=orig.array.map((n,i)=>({name:n,value:orig.values[i]}));
+    buildBars(initArr,[],[]);
+    updateTable(initArr,[],[]);
+
+    ok(`${algo} carregado — ${res.total_steps} passos · ${res.comparisons} comparações`);
+    runAnimation(res);
+  }catch(e){
+    err("Erro: "+e.message);
+    document.getElementById("v-play").disabled=false;
+  }
+}
+
+function iniciarSortOffline(){
+  const fmt=document.getElementById("offline-fmt").value;
+  iniciarSort(fmt);
+}
+
+function runAnimation(res){
+  let t=0;
+  const speed=()=>parseInt(document.getElementById("v-speed").value);
+
+  function tick(){
+    if(stepIdx>=sortSteps.length){
+      // Completo
+      buildBars(res.sorted, [], res.sorted.map((_,i)=>i));
+      updateTable(res.sorted, [], res.sorted.map((_,i)=>i));
+      updateStats(sortSteps.length,sortSteps.length,res.comparisons,res.swaps,res.time_ms);
+      document.getElementById("v-log").textContent=`✓ Ordenação completa! ${res.comparisons} comparações, ${res.swaps} trocas, ${res.time_ms} ms`;
+      sortRunning=false;
+      document.getElementById("v-play").disabled=false;
+      document.getElementById("v-pause").disabled=true;
+      ok("Ordenação concluída!");
+
+      // Salvar automaticamente no dataset global
+      dataset=res.sorted;
+      document.getElementById("btn-save").disabled=false;
+      return;
+    }
+    const s=sortSteps[stepIdx];
+    const arr=(s.array||[]).map((n,i)=>({name:n,value:(s.values||[])[i]??0}));
+    buildBars(arr, s.comparing||[], s.sorted||[], s.pivot??-1);
+    updateTable(arr, s.comparing||[], s.sorted||[]);
+    updateStats(stepIdx+1,sortSteps.length,
+      Math.round(res.comparisons*(stepIdx/sortSteps.length)),
+      Math.round(res.swaps*(stepIdx/sortSteps.length)),
+      res.time_ms*(stepIdx/sortSteps.length));
+    document.getElementById("v-log").textContent=
+      `Passo ${stepIdx+1}/${sortSteps.length} · comparando índices [${(s.comparing||[]).join(", ")}]`;
+    stepIdx++;
+    playTimer=setTimeout(tick, speed());
+  }
+  playTimer=setTimeout(tick, speed());
+}
+
+function pauseSort(){
+  if(playTimer){clearTimeout(playTimer);playTimer=null}
+  sortRunning=false;
+  document.getElementById("v-play").textContent="▶ Continuar";
+  document.getElementById("v-play").disabled=false;
+}
+
+function stepSort(){
+  if(sortResult && stepIdx<sortSteps.length){
+    const s=sortSteps[stepIdx];
+    const arr=(s.array||[]).map((n,i)=>({name:n,value:(s.values||[])[i]??0}));
+    buildBars(arr,s.comparing||[],s.sorted||[],s.pivot??-1);
+    updateTable(arr,s.comparing||[],s.sorted||[]);
+    stepIdx++;
+    document.getElementById("v-log").textContent=
+      `Passo ${stepIdx}/${sortSteps.length}`;
+  }
+}
+
+function resetSort(){
+  if(playTimer){clearTimeout(playTimer);playTimer=null}
+  sortRunning=false;sortSteps=[];stepIdx=0;sortResult=null;
+  document.getElementById("viz-bars").innerHTML="";
+  document.getElementById("ds-body").innerHTML=
+    `<tr><td colspan="4" style="text-align:center;padding:2rem;color:var(--muted)">Pressione Play ▶</td></tr>`;
+  document.getElementById("v-play").disabled=false;
+  document.getElementById("v-play").textContent="▶ Play";
+  document.getElementById("v-pause").disabled=true;
+  document.getElementById("v-step").disabled=true;
+  document.getElementById("v-log").textContent="Resetado. Configure e pressione Play ▶";
+  updateStats(0,0,0,0,0);
+  ok("Pronto.");
+}
+
+// ══════════════════════════════════════════════
+//  COMPARAR ALGORITMOS
+// ══════════════════════════════════════════════
+async function compararAlgos(offline){
+  const source=document.getElementById("c-source").value;
+  const size  =document.getElementById("c-size").value;
+  const algos =[...document.querySelectorAll("#c-algos input:checked")].map(x=>x.value);
+  if(!algos.length){err("Selecione ao menos um algoritmo");return}
+
+  busy("Comparando algoritmos…");
+  try{
+    let url=`/api/comparar?source=${source}&size=${size}&${algos.map(a=>"algo="+a).join("&")}`;
+    if(offline){
+      const fmt=document.getElementById("offline-fmt").value;
+      url+=`&offline=true&fmt=${fmt}`;
+    }
+    const res=await GET(url);
+    if(!res.ok)throw new Error(res.erro);
+    cmpData=res.resultados;
+    renderCmpTable(cmpData, size);
+    renderCmpChart(cmpData, cmpMetric);
+    ok(`Comparação concluída — ${size} países.`);
+  }catch(e){err("Erro: "+e.message)}
+}
+
+function compararAlgosOffline(){compararAlgos(true)}
+
+function setMetric(m, btn){
+  cmpMetric=m;
+  document.querySelectorAll("#c-metric-row .btn").forEach(b=>b.classList.remove("on-metric"));
+  btn.classList.add("on-metric");
+  if(cmpData)renderCmpChart(cmpData,m);
+}
+
+function renderCmpTable(data, size){
+  const tb=document.getElementById("c-body");
+  const rows=Object.entries(data).map(([algo,d])=>{
+    const cx=COMPLEXIDADES[algo]||{};
+    return `<tr>
+      <td style="font-weight:600;color:${COLORS[algo]}">${cap(algo)}</td>
+      <td>${d.comparisons}</td><td>${d.swaps}</td><td>${d.time_ms}</td>
+      <td>${cx.best||"—"}</td><td>${cx.avg||"—"}</td><td>${cx.worst||"—"}</td>
+    </tr>`;
+  });
+  tb.innerHTML=rows.join("")||`<tr><td colspan="7" style="text-align:center">Sem resultados</td></tr>`;
+}
+
+function renderCmpChart(data, metric){
+  const wrap=document.getElementById("c-chart");
+  const entries=Object.entries(data);
+  if(!entries.length){return}
+  const max=Math.max(...entries.map(([,d])=>d[metric]||0))||1;
+  wrap.innerHTML=entries.map(([algo,d])=>{
+    const val=d[metric]||0;
+    const pct=Math.round((val/max)*100);
+    const label=metric==="time_ms"?val+"ms":val;
+    return `<div class="chart-bar-wrap">
+      <div style="height:100%;display:flex;align-items:flex-end;width:100%">
+        <div class="chart-bar-inner" style="height:${pct}%;background:${COLORS[algo]};width:100%">
+          <span>${label}</span>
+        </div>
+      </div>
+      <div class="chart-label">${cap(algo)}</div>
+    </div>`;
+  }).join("");
+}
+
+// ══════════════════════════════════════════════
+//  BUSCA
+// ══════════════════════════════════════════════
+async function executarBusca(offline){
+  const source=document.getElementById("b-source").value;
+  const q     =document.getElementById("b-q").value.trim();
+  const tipo  =document.getElementById("b-tipo").value;
+  if(!q){err("Digite algo para buscar");return}
+
+  busy("Buscando…");
+  try{
+    let url=`/api/busca?source=${source}&q=${encodeURIComponent(q)}&tipo=${tipo}`;
+    if(offline){
+      const fmt=document.getElementById("offline-fmt").value;
+      url+=`&offline=true&fmt=${fmt}`;
+    }
+    const res=await GET(url);
+    if(!res.ok)throw new Error(res.erro);
+    renderBuscaResult(res, q);
+    ok(`Busca concluída — ${res.total} registros verificados.`);
+  }catch(e){err("Erro: "+e.message)}
+}
+
+function executarBuscaOffline(){executarBusca(true)}
+
+function compararBuscas(){
+  const q=document.getElementById("b-q").value.trim();
+  if(!q){err("Digite algo para buscar");return}
+  executarBusca(false);
+}
+
+function renderBuscaResult(res, q){
+  const linRes=res.linear;
+  const binRes=res.binaria;
+
+  document.getElementById("busca-result").innerHTML=`
+    <div class="stats-row">
+      <span class="stat-pill">Linear: <b>${linRes.passos} comparações</b></span>
+      <span class="stat-pill y">Binária: <b>${binRes.passos} comparações</b></span>
+      <span class="stat-pill g">Tempo: <b>${res.time_ms} ms</b></span>
+    </div>`;
+
+  const linHtml = linRes.encontrados.length
+    ? linRes.encontrados.map(e=>`<div class="found-item">✅ ${e.item.name} — ${parseFloat(e.item.value).toFixed(2)} (idx ${e.index})</div>`).join("")
+    : `<div class="alert a-warn">❌ Nada encontrado pela busca linear para "${esc(q)}"</div>`;
+
+  const binHtml = binRes.encontrados.length
+    ? binRes.encontrados.map(e=>`<div class="found-item">✅ ${e.item.name} — ${parseFloat(e.item.value).toFixed(2)}</div>`).join("")
+    : `<div class="alert a-warn">❌ Busca binária: nenhum resultado (requer valor numérico exato)</div>`;
+
+  document.getElementById("busca-detail").innerHTML=`
+    <div style="font-weight:600;margin-bottom:.5rem;font-size:.85rem">Busca Linear — O(n)</div>
+    ${linHtml}
+    <div style="font-weight:600;margin:.75rem 0 .5rem;font-size:.85rem">Busca Binária — O(log n)</div>
+    ${binHtml}
+    <div class="alert a-info" style="margin-top:.75rem;font-size:.8rem">
+      💡 Busca binária funciona por <b>valor numérico exato</b>. Linear busca por substring no nome.
+    </div>`;
+}
+
+// ══════════════════════════════════════════════
+//  PERSISTÊNCIA
+// ══════════════════════════════════════════════
+async function carregarAPI(){
+  busy("Buscando dados da API…");
+  const source=document.getElementById("v-source").value;
+  const size  =document.getElementById("v-size").value;
+  try{
+    const res=await GET(`/api/dados?source=${source}&size=${size}`);
+    if(!res.ok)throw new Error(res.erro);
+    dataset=res.dados;
+    document.getElementById("btn-save").disabled=false;
+    document.getElementById("ds-tag").textContent=`${res.dados.length} países · 🌐 API`;
+    buildBars(dataset,[],[]);
+    updateTable(dataset,[],[]);
+    ok(`${res.dados.length} registros carregados da API (${res.label}).`);
+  }catch(e){err("Erro API: "+e.message)}
+}
+
+async function salvarDados(){
+  if(!dataset.length){err("Carregue dados primeiro");return}
+  busy("Salvando CSV e Pickle…");
+  document.getElementById("btn-save").disabled=true;
+  try{
+    const res=await POST("/api/salvar",{dados:dataset});
+    if(!res.ok)throw new Error(res.erro);
+    const m=res.metricas;
+    document.getElementById("p-csv-write").innerHTML=`CSV: <b>${m.csv.tamanho_kb} KB</b> em ${m.csv.tempo_ms} ms`;
+    document.getElementById("p-pkl-write").innerHTML=`Pickle: <b>${m.pkl.tamanho_kb} KB</b> em ${m.pkl.tempo_ms} ms`;
+    document.getElementById("p-save-metrics").style.display="block";
+    document.getElementById("p-status").textContent=`${res.registros} registros salvos`;
+    document.getElementById("btn-offline").disabled=false;
+    document.getElementById("btn-painel").disabled=false;
+    document.getElementById("btn-inspect").disabled=false;
+    document.getElementById("save-ind").classList.add("show");
+    ok(`Salvo em CSV e Pickle — ${res.registros} registros.`);
+  }catch(e){err("Erro ao salvar: "+e.message)}
+  finally{document.getElementById("btn-save").disabled=false}
+}
+
+async function carregarOffline(){
+  const fmt=document.getElementById("offline-fmt").value;
+  busy(`Lendo ${fmt.toUpperCase()} do disco…`);
+  try{
+    const res=await GET(`/api/offline?fmt=${fmt}`);
+    if(!res.ok)throw new Error(res.erro);
+    dataset=res.dados;
+    buildBars(dataset,[],[]);
+    updateTable(dataset,[],[]);
+    document.getElementById("btn-save").disabled=false;
+    document.getElementById("ds-tag").textContent=`${res.dados.length} países · 💾 ${fmt.toUpperCase()}`;
+    ok(`${res.dados.length} registros do disco (${fmt.toUpperCase()}) em ${res.tempo_ms} ms.`);
+  }catch(e){err("Erro disco: "+e.message)}
+}
+
+async function atualizarPainel(){
+  busy("Atualizando painel…");
+  try{
+    const res=await GET("/api/painel");
+    renderPainel(res);
+    ok("Painel atualizado.");
+  }catch(e){err(e.message)}
+}
+
+function renderPainel(d){
+  const fmts=[
+    {k:"csv",label:"CSV",  ext:".csv",fb:"fb-txt",tipo:"Texto"},
+    {k:"pkl",label:"Pickle",ext:".pkl",fb:"fb-bin",tipo:"Binário"},
+  ];
+  document.getElementById("p-compare").innerHTML=fmts.map(f=>{
+    const v=d[f.k];
+    if(!v?.disponivel)
+      return `<div class="fcard na"><div class="fn">${f.label}</div><div class="fe">${f.ext}</div>
+        <div style="font-size:.78rem;color:var(--muted)">Não disponível</div></div>`;
+    return `<div class="fcard">
+      <div class="fn">${f.label}</div><div class="fe">${f.ext}</div>
+      <div class="fs">Tamanho: <b>${v.tamanho_kb} KB</b></div>
+      <div class="fs">Leitura: <b>${v.tempo_leitura_ms} ms</b></div>
+      <span class="fb ${f.fb}">${f.tipo}</span>
+    </div>`;
+  }).join("");
+
+  // Barras visuais
+  const csv=d.csv?.tamanho_kb||0;
+  const pkl=d.pkl?.tamanho_kb||0;
+  const max=Math.max(csv,pkl,0.001);
+  document.getElementById("p-bars").innerHTML=
+    `<div class="lbl" style="margin-top:.75rem">Tamanho relativo</div>`+
+    barVis("CSV",csv,max,"#58a6ff")+
+    barVis("Pickle",pkl,max,"#e3b341");
+}
+
+function barVis(label,val,max,color){
+  const pct=Math.round((val/max)*100);
+  return `<div class="bar-vis"><div class="bar-vis-inner">
+    <span style="width:50px;text-align:right;color:var(--muted)">${label}</span>
+    <div class="bar-vis-track"><div class="bar-vis-fill" style="width:${pct}%;background:${color}"></div></div>
+    <span style="width:55px;color:var(--yellow)">${val} KB</span>
+  </div></div>`;
+}
+
+async function inspecionar(){
+  busy("Inspecionando…");
+  try{
+    const res=await GET("/api/inspecionar");
+    renderInspect(res);
+    ok("Inspeção concluída.");
+  }catch(e){err(e.message)}
+}
+
+function renderInspect(d){
+  const map={csv:"tp-csv",pkl:"tp-pkl"};
+  for(const[fmt,pid]of Object.entries(map)){
+    const v=d[fmt];
+    const el=document.getElementById(pid);
+    if(!v?.disponivel){el.innerHTML=`<div class="alert a-warn">Arquivo não encontrado.</div>`;continue}
+    let html=`<span style="font-size:.78rem;color:var(--muted)">Tamanho: ${v.tamanho_kb} KB</span>`;
+    if(v.texto){
+      html+=`<div class="lbl">📄 Conteúdo do arquivo (texto legível)</div>
+        <pre class="code">${esc(v.texto)}</pre>`;
+    } else {
+      html+=`<div class="alert a-warn" style="margin:.5rem 0">
+        ⚠️ Binário — não legível como texto. Veja o hexdump abaixo.</div>`;
+    }
+    html+=`<div class="lbl" style="margin-top:.5rem">🔢 Hexdump (bytes reais)</div>
+      <pre class="code">${esc(v.hexdump)}</pre>`;
+    el.innerHTML=html;
+  }
+}
+
+// ══════════════════════════════════════════════
+//  HELPERS
+// ══════════════════════════════════════════════
+function swTab(btn,pid){
+  document.querySelectorAll(".tabs .tab").forEach(b=>b.classList.remove("on"));
+  document.querySelectorAll(".tpanel").forEach(p=>p.classList.remove("on"));
+  btn.classList.add("on");
+  document.getElementById(pid).classList.add("on");
+}
+
+function scrollTo(id){
+  document.getElementById(id)?.scrollIntoView({behavior:"smooth"});
+}
+
+function cap(s){return s.charAt(0).toUpperCase()+s.slice(1)}
+function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}
+
+ok("Pronto. Configure e pressione Play ▶ para começar.");
+</script>
+</body>
+</html>
