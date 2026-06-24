@@ -14,7 +14,7 @@ import urllib.error
 import json
 import random
 
-app = Flask(__name__, static_folder="static")
+app = Flask(__name__)
 
 # ── CORS ──
 @app.after_request
