@@ -1,0 +1,13 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Iniciar The Sort Engine",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend.py",
+      "console": "integratedTerminal",
+      "env": { "FLASK_ENV": "development" }
+    }
+  ]
+}
